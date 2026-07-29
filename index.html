@@ -131,6 +131,8 @@ tfoot td{position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:
   <div class="datebox"><span>Desde</span><input type="date" id="d1" onchange="render()"><span>Hasta</span><input type="date" id="d2" onchange="render()"></div>
   <button class="btn" onclick="fullRange()">Todo</button>
   <button class="btn btn-x" onclick="exportExcel()">⬇ Exportar a Excel</button>
+  <input type="text" id="gsUrl" placeholder="URL app web de Google Sheets…" oninput="saveGsUrl()" style="width:300px">
+  <button class="btn btn-p" onclick="exportToSheets()">☁ Enviar a Google Sheets</button>
 </div>
 <div class="toolbar">
   <input type="text" id="q" placeholder="Buscar farmacia (K### o nombre)…" oninput="render()">
@@ -346,6 +348,37 @@ function render(){if(!DATA.length)return;const rows=filtered();let html='';let T
   document.getElementById('rinfo').innerHTML=`Rango <b>${s1}</b> — <b>${s2}</b> &nbsp;·&nbsp; LD <b>${money(TL)}</b> &nbsp;·&nbsp; KIELSA <b>${money(TD)}</b> &nbsp;·&nbsp; descuadre <b>${money(r2(TL-TD))}</b> &nbsp;·&nbsp; ${rows.length} farmacias`;
 }
 function tg(k){open[k]=!open[k];render();}
+function saveGsUrl(){try{localStorage.setItem('cp_gsUrl',document.getElementById('gsUrl').value.trim());}catch(e){}}
+function loadGsUrl(){try{const u=localStorage.getItem('cp_gsUrl');if(u&&document.getElementById('gsUrl'))document.getElementById('gsUrl').value=u;}catch(e){}}
+window.addEventListener('load',loadGsUrl);
+function buildSheetRows(){
+  const rows=filtered();const out=[];let TL=0,TN=0,TD=0;
+  rows.forEach(R=>{TL+=R.ld;TN+=R.net;TD+=R.dia;
+    out.push({level:0,c:R.s+' · '+R.nom,ld:R.ld,net:R.net,difk:R.difk,dia:R.dia,difn:R.difn});
+    R.det.forEach(d=>{const dk=r2(d.ld-d.net),dn=r2(d.ld-d.dia);
+      out.push({level:1,c:d.f,ld:d.ld,net:d.net,difk:dk,dia:d.dia,difn:dn});
+      d.L.forEach(x=>out.push({level:2,c:'Préstamo #'+x.id+' — '+x.cli,ld:x.ld,net:x.net,difk:r2(x.ld-x.net),dia:null,difn:null}));
+      d.DL.forEach(m=>out.push({level:2,c:'DIARIO '+m.doc+' · '+m.ref,ld:null,net:null,difk:null,dia:m.debe,difn:null}));
+    });
+  });
+  out.push({level:0,c:'TOTAL GENERAL',ld:r2(TL),net:r2(TN),difk:r2(TL-TN),dia:r2(TD),difn:r2(TL-TD)});
+  return out;
+}
+async function exportToSheets(){
+  const url=(document.getElementById('gsUrl').value||'').trim();
+  if(!/^https:\/\/script\.google\.com\//.test(url)){alert('Pega la URL de tu app web de Apps Script (empieza con https://script.google.com/…).');return;}
+  saveGsUrl();
+  const s1=document.getElementById('d1').value.split('-').reverse().join('/');
+  const s2=document.getElementById('d2').value.split('-').reverse().join('/');
+  const payload={meta:{titulo:'Conciliación de Préstamos — Kielsa / NEXTFIN',rango:s1+' a '+s2,generado:new Date().toISOString()},
+    headers:['Farmacia / Fecha / Detalle','ValorCompra (LD)','NEXTFIN neto','Dif LD-NEXTFIN','KIELSA Debe (DIARIO)','Dif LD-KIELSA'],
+    rows:buildSheetRows()};
+  const btns=document.querySelectorAll('button');
+  try{
+    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
+    alert('Enviado a Google Sheets ✓\nAbre tu hoja para ver la conciliación con el esquema. ('+payload.rows.length+' filas)');
+  }catch(e){alert('No se pudo enviar: '+e.message);}
+}
 function exportExcel(){
   if(typeof XLSX==='undefined'){alert('No se pudo generar el Excel: falta la librería XLSX.');return;}
   const rows=filtered();
