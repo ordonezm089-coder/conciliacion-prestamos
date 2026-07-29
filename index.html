@@ -213,8 +213,11 @@ function handleFiles(files){
       if(!rows.length)return; const keys=Object.keys(rows[0]).map(norm);
       let type=null;
       if(keys.includes('idsolicitud'))type='ld';
-      else if(keys.includes('cco'))type='dia';
-      else if(keys.includes('documento')||keys.some(k=>k.startsWith('credito')))type='net';
+      else{let ent='';for(let i=0;i<Math.min(rows.length,80);i++){const nm=norm(gf(rows[i],['Nombre','NOMBRE'])||'');if(nm.includes('nextfin')){ent='nextfin';break;}if(nm.includes('kielsa')){ent='kielsa';break;}}
+        if(ent==='nextfin')type='dia';
+        else if(ent==='kielsa')type='net';
+        else if(keys.includes('cco'))type='dia';
+        else if(keys.includes('documento')||keys.some(k=>k.startsWith('credito')))type='net';}
       if(type){RAW[type]=rows;markChip(type,f.name,rows.length);tryReconcile();}
     };
     rd.readAsArrayBuffer(f);
@@ -244,10 +247,19 @@ function reconcile(){
     n.cred+=num(gf(row,['Créditos','Creditos']));n.deb+=num(gf(row,['Débitos','Debitos']));
     if(norm(gf(row,['Referencia'])||'').includes('nulacion'))n.anul=true;n.fecha=fmtDate(gf(row,['Fecha']));});
   const diaLines={},diaKF={};
-  RAW.dia.forEach(row=>{const cco=String(gf(row,['CCO'])||'');const last=cco.split('-').pop();const ki=parseInt(last,10);const k=isNaN(ki)?'?':String(ki);
-    const fecha=fmtDate(gf(row,['FECHA','Fecha']));const debe=num(gf(row,['DEBE','Debe']));const haber=num(gf(row,['HABER','Haber']));
-    const key=k+'|'+fecha;diaKF[key]=(diaKF[key]||0)+debe;
-    (diaLines[key]||(diaLines[key]=[])).push({doc:String(gf(row,['DOCUMENTO','Documento'])||''),ref:String(gf(row,['REFERENCIA','Referencia'])||''),pda:String(gf(row,['PDA'])||''),debe:r2(debe),haber:r2(haber)});});
+  const diaCco=RAW.dia.length&&gf(RAW.dia[0],['CCO'])!=null;
+  if(diaCco){
+    RAW.dia.forEach(row=>{const cco=String(gf(row,['CCO'])||'');const last=cco.split('-').pop();const ki=parseInt(last,10);const k=isNaN(ki)?'?':String(ki);
+      const fecha=fmtDate(gf(row,['FECHA','Fecha']));const debe=num(gf(row,['DEBE','Debe']));const haber=num(gf(row,['HABER','Haber']));
+      const key=k+'|'+fecha;diaKF[key]=(diaKF[key]||0)+debe;
+      (diaLines[key]||(diaLines[key]=[])).push({doc:String(gf(row,['DOCUMENTO','Documento'])||''),ref:String(gf(row,['REFERENCIA','Referencia'])||''),pda:String(gf(row,['PDA'])||''),debe:r2(debe),haber:r2(haber)});});
+  }else{
+    /* Formato NETFIX en la casilla DIARIO: sin CCO. Se asigna cada movimiento a su farmacia y fecha usando el # de prestamo (Documento) contra LD. Monto neto = Creditos - Debitos. */
+    RAW.dia.forEach(row=>{const doc=String(gf(row,['Documento','DOCUMENTO'])||'');const m=doc.match(/(\d{4,})/);if(!m)return;const pid=m[1];const rec=ldById[pid];if(!rec)return;
+      const k=rec.k,fecha=rec.fecha;const cred=num(gf(row,['Créditos','Creditos']));const deb=num(gf(row,['Débitos','Debitos']));const val=r2(cred-deb);
+      const key=k+'|'+fecha;diaKF[key]=(diaKF[key]||0)+val;
+      (diaLines[key]||(diaLines[key]=[])).push({doc:doc,ref:String(gf(row,['Referencia','REFERENCIA'])||''),pda:'',debe:val,haber:r2(deb)});});
+  }
   const anulados=Object.keys(net).filter(p=>net[p].anul).map(p=>({id:p,fecha:net[p].fecha,cred:r2(net[p].cred),deb:r2(net[p].deb),neto:r2(net[p].cred-net[p].deb)})).sort((a,b)=>a.id-b.id);
   const ldKF={},netKF={},kname={},byKey={};
   loans.forEach(rec=>{const key=rec.k+'|'+rec.fecha;ldKF[key]=(ldKF[key]||0)+rec.valor;
@@ -334,11 +346,61 @@ function render(){if(!DATA.length)return;const rows=filtered();let html='';let T
   document.getElementById('rinfo').innerHTML=`Rango <b>${s1}</b> — <b>${s2}</b> &nbsp;·&nbsp; LD <b>${money(TL)}</b> &nbsp;·&nbsp; KIELSA <b>${money(TD)}</b> &nbsp;·&nbsp; descuadre <b>${money(r2(TL-TD))}</b> &nbsp;·&nbsp; ${rows.length} farmacias`;
 }
 function tg(k){open[k]=!open[k];render();}
-function exportExcel(){const rows=filtered();const s1=document.getElementById('d1').value.split('-').reverse().join('/'),s2=document.getElementById('d2').value.split('-').reverse().join('/');
-  const nf="mso-number-format:'#,##0.00';";const R='text-align:right;'+nf;const hd='background:#0f2544;color:#fff;font-weight:bold;border:.5pt solid #b9c4d6;padding:4px;';const cd='border:.5pt solid #d9dfe8;padding:3px;';
-  let TL=0,TN=0,TD=0,body='';rows.forEach(R2=>{TL+=R2.ld;TN+=R2.net;TD+=R2.dia;body+=`<tr><td style="${cd}">${R2.s}</td><td style="${cd}">${esc(R2.nom)}</td><td style="${cd+R}">${R2.ld}</td><td style="${cd+R}">${R2.net}</td><td style="${cd+R}">${R2.difk}</td><td style="${cd+R}">${R2.dia}</td><td style="${cd+R}">${R2.difn}</td></tr>`;});
-  const tb=cd+R+'font-weight:bold;background:#e8eef7;';const tot=`<tr><td colspan="2" style="${cd}font-weight:bold;background:#e8eef7;">TOTAL GENERAL</td><td style="${tb}">${r2(TL)}</td><td style="${tb}">${r2(TN)}</td><td style="${tb}">${r2(TL-TN)}</td><td style="${tb}">${r2(TD)}</td><td style="${tb}">${r2(TL-TD)}</td></tr>`;
-  const table=`<table border="1" style="border-collapse:collapse;font-family:Arial;font-size:10pt;"><tr><td colspan="7" style="font-size:14pt;font-weight:bold;color:#0f2544;padding:6px;">Conciliación de Préstamos — Kielsa / NEXTFIN</td></tr><tr><td colspan="7" style="padding:4px;color:#555;">Rango: ${s1} a ${s2} · Montos en Lempiras</td></tr><tr></tr><tr><td style="${hd}">Farmacia (K)</td><td style="${hd}">Nombre</td><td style="${hd}">ValorCompra (LD)</td><td style="${hd}">NEXTFIN neto</td><td style="${hd}">Dif LD-NEXTFIN</td><td style="${hd}">KIELSA Debe (DIARIO)</td><td style="${hd}">Dif LD-KIELSA</td></tr>${body}${tot}</table>`;
-  const wbk=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Conciliacion</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>${table}</body></html>`;
-  const blob=new Blob(['﻿',wbk],{type:'application/vnd.ms-excel'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Conciliacion_${s1.replace(/\//g,'-')}_a_${s2.replace(/\//g,'-')}.xls`;document.body.appendChild(a);a.click();document.body.removeChild(a);}
+function exportExcel(){
+  if(typeof XLSX==='undefined'){alert('No se pudo generar el Excel: falta la librería XLSX.');return;}
+  const rows=filtered();
+  const s1=document.getElementById('d1').value.split('-').reverse().join('/');
+  const s2=document.getElementById('d2').value.split('-').reverse().join('/');
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const onlyd=document.getElementById('onlydiff').checked;
+  const [lo,hi]=bounds();
+  const aoa=[
+    ['Conciliación de Préstamos — Kielsa / NEXTFIN'],
+    ['Rango: '+s1+' a '+s2+' · Montos en Lempiras · (+/- a la izquierda para expandir/contraer)'],
+    [],
+    ['Farmacia / Fecha / Detalle','ValorCompra (LD)','NEXTFIN neto','Dif LD-NEXTFIN','KIELSA Debe (DIARIO)','Dif LD-KIELSA']
+  ];
+  const lvl=[0,0,0,0];
+  let TL=0,TN=0,TD=0;
+  rows.forEach(R=>{
+    TL+=R.ld;TN+=R.net;TD+=R.dia;
+    aoa.push([R.s+' · '+R.nom,R.ld,R.net,R.difk,R.dia,R.difn]);lvl.push(0);
+    R.det.forEach(d=>{
+      const dk=r2(d.ld-d.net),dn=r2(d.ld-d.dia);
+      aoa.push([d.f,d.ld,d.net,dk,d.dia,dn]);lvl.push(1);
+      d.L.forEach(x=>{
+        const lk=r2(x.ld-x.net);
+        aoa.push(['Préstamo #'+x.id+' — '+x.cli,x.ld,x.net,lk,null,null]);lvl.push(2);
+      });
+      d.DL.forEach(m=>{
+        aoa.push(['DIARIO '+m.doc+' · '+m.ref,null,null,null,m.debe,null]);lvl.push(2);
+      });
+    });
+  });
+  const anR=(typeof ANUL!=='undefined'?ANUL:[]).filter(a=>{const n=dnum(a.fecha);return n>=lo&&n<=hi;});
+  if((!q||'anulados'.includes(q))&&!onlyd&&anR.length){
+    const ac=anR.reduce((s,a)=>s+a.cred,0),ad=anR.reduce((s,a)=>s+a.deb,0);
+    aoa.push(['ANULADOS ('+anR.length+') — no están en LD',null,r2(ac-ad),null,null,null]);lvl.push(0);
+    anR.forEach(a=>{aoa.push(['#'+a.id+' · '+a.fecha,null,a.neto,null,'cr '+a.cred+' / db '+a.deb,null]);lvl.push(1);});
+  }
+  aoa.push([]);lvl.push(0);
+  aoa.push(['TOTAL GENERAL',r2(TL),r2(TN),r2(TL-TN),r2(TD),r2(TL-TD)]);lvl.push(0);
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:54},{wch:16},{wch:14},{wch:15},{wch:20},{wch:14}];
+  ws['!outline']={above:true};
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:5}},{s:{r:1,c:0},e:{r:1,c:5}}];
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  ws['!rows']=[];
+  for(let r=range.s.r;r<=range.e.r;r++){
+    ws['!rows'][r]={level:(lvl[r]||0)};
+    for(let c=1;c<=5;c++){
+      const cell=ws[XLSX.utils.encode_cell({r:r,c:c})];
+      if(cell&&cell.t==='n')cell.z='#,##0.00';
+    }
+  }
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Conciliación');
+  const fn='Conciliacion_'+s1.replace(/\//g,'-')+'_a_'+s2.replace(/\//g,'-')+'.xlsx';
+  XLSX.writeFile(wb,fn);
+}
 </script></body></html>
