@@ -83,10 +83,39 @@ tbody tr:nth-child(even){background:var(--soft)}
 tfoot td{position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:700;border-top:2px solid var(--gold)}
 .rangeinfo{font-size:13px;color:var(--mut);margin:8px 2px 14px;padding:10px 14px;background:var(--card);border:1px solid var(--line);border-radius:9px}
 .rangeinfo b{color:var(--navy)} .hidden{display:none!important}
+#loginOverlay{position:fixed;inset:0;background:linear-gradient(120deg,var(--navy),var(--navy2));display:flex;align-items:center;justify-content:center;z-index:9999}
+#loginOverlay.hidden{display:none!important}
+.loginCard{background:#fff;border-radius:16px;padding:34px 30px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center}
+.loginCard h2{color:var(--navy);margin:0 0 6px;font-size:20px;justify-content:center;text-transform:none;letter-spacing:0}
+.loginCard h2::before{display:none}
+.loginCard p{color:var(--mut);font-size:12px;margin-bottom:16px}
+.loginCard input{width:100%;padding:11px 13px;margin:7px 0;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none}
+.loginCard input:focus{border-color:var(--ac);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.loginCard button{width:100%;margin-top:12px;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer}
+.loginCard button:hover{background:var(--navy2)}
+#lgErr{color:var(--pos);font-size:12px;margin-top:10px;min-height:16px}
+.colPanel,.farmPanel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 12px;box-shadow:0 4px 14px rgba(15,37,68,.08);max-width:430px}
+.colPanel.hidden,.farmPanel.hidden{display:none}
+.ckrow{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);padding:4px 2px;cursor:pointer}
+.ckrow input{margin:0}
+.farmScroll{max-height:240px;overflow:auto;margin-top:6px;border-top:1px solid var(--line);padding-top:6px}
+.panelHint{font-size:11px;color:var(--mut);margin-bottom:8px}
+#pivot thead th[draggable=true]{cursor:grab} #pivot thead th[draggable=true]:active{cursor:grabbing}
+.logoutBtn{cursor:pointer;font-size:12px;color:#dbe6f5;text-decoration:underline;margin-left:12px}
 </style></head><body>
+<div id="loginOverlay">
+  <div class="loginCard">
+    <h2>Conciliación de Préstamos</h2>
+    <p>Acceso restringido</p>
+    <input id="lgUser" placeholder="Usuario" autocomplete="username">
+    <input id="lgPass" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <button onclick="doLogin()">Entrar</button>
+    <div id="lgErr"></div>
+  </div>
+</div>
 <div class="hero"><div class="wrap">
   <div><h1>Conciliación de Préstamos</h1><div class="meta">Kielsa Farmacéutica &nbsp;·&nbsp; NEXTFIN Capital &nbsp;·&nbsp; Plantilla reutilizable</div></div>
-  <div class="badge" id="badge">Carga tus archivos para comenzar</div>
+  <div><div class="badge" id="badge">Carga tus archivos para comenzar</div><span class="logoutBtn" onclick="logout()">Salir</span></div>
 </div></div>
 
 <div class="wrap">
@@ -109,6 +138,8 @@ tfoot td{position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:
 <div class="tabs">
   <div class="tab active" data-p="resumen">Resumen ejecutivo</div>
   <div class="tab" data-p="interactiva">Conciliación interactiva</div>
+  <div class="tab" data-p="cmp_kl">KIELSA vs LD</div>
+  <div class="tab" data-p="cmp_ln">LD vs NEXTFIN</div>
   <div class="tab" data-p="anulados">Anulados</div>
 </div>
 
@@ -139,12 +170,63 @@ tfoot td{position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:
   <button class="btn" onclick="expandAll(true)">Expandir</button>
   <button class="btn" onclick="expandAll(false)">Colapsar</button>
   <label style="font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px"><input type="checkbox" id="onlydiff" onchange="render()"> Solo con diferencia</label>
+  <button class="btn" onclick="toggleColPanel()">⚙ Columnas</button>
+  <button class="btn" onclick="toggleFarmPanel()">▤ Farmacias</button>
+</div>
+<div class="colPanel hidden" id="colPanel">
+  <div class="panelHint">Marca para mostrar u ocultar cada columna. Arrastra los encabezados de la tabla para reordenarlas.</div>
+  <div id="colList"></div>
+</div>
+<div class="farmPanel hidden" id="farmPanel">
+  <div class="panelHint">Elige qué farmacias mostrar (afecta esta tabla y los comparativos).</div>
+  <div class="toolbar" style="margin:0 0 6px">
+    <input type="text" id="farmSearch" placeholder="Buscar farmacia…" oninput="initFarmFilter()" style="width:180px">
+    <button class="btn" onclick="farmAll(true)">Todas</button>
+    <button class="btn" onclick="farmAll(false)">Ninguna</button>
+  </div>
+  <div class="farmScroll" id="farmList"></div>
 </div>
 <div class="rangeinfo" id="rinfo"></div>
 <div class="pvwrap"><table id="pivot">
-<thead><tr><th>Farmacia / Fecha / Detalle</th><th class="n">ValorCompra (LD)</th><th class="n">NEXTFIN neto</th><th class="n">Dif LD-NEXTFIN</th><th class="n">KIELSA Debe (DIARIO)</th><th class="n">Dif LD-KIELSA</th></tr></thead>
+<thead><tr><th data-vid="label">Farmacia / Fecha / Detalle</th><th class="n" data-vid="0" draggable="true" title="Arrastra para reordenar">ValorCompra (LD)</th><th class="n" data-vid="1" draggable="true" title="Arrastra para reordenar">NEXTFIN neto</th><th class="n" data-vid="2" draggable="true" title="Arrastra para reordenar">Dif LD-NEXTFIN</th><th class="n" data-vid="3" draggable="true" title="Arrastra para reordenar">KIELSA neto (DIARIO)</th><th class="n" data-vid="4" draggable="true" title="Arrastra para reordenar">Dif LD-KIELSA</th></tr></thead>
 <tbody id="pbody"></tbody>
 <tfoot><tr><td>TOTAL (rango filtrado)</td><td class="n" id="tLd"></td><td class="n" id="tNet"></td><td class="n" id="tDk"></td><td class="n" id="tDia"></td><td class="n" id="tDn"></td></tr></tfoot>
+</table></div>
+</div>
+
+<div class="panel" id="cmp_kl">
+<h2>KIELSA vs LD por farmacia</h2>
+<div class="note-box">Compara <b>ValorCompra (LD)</b> contra el <b>neto de KIELSA (Débitos − Créditos)</b> por farmacia. Usa el filtro de farmacias de la pestaña «Conciliación interactiva».</div>
+<div class="toolbar">
+  <div class="datebox"><span>Desde</span><input type="date" id="kl_d1" onchange="renderCmpKL()"><span>Hasta</span><input type="date" id="kl_d2" onchange="renderCmpKL()"></div>
+  <button class="btn" onclick="klFull()">Todo</button>
+  <input type="text" id="kl_q" placeholder="Buscar farmacia…" oninput="renderCmpKL()">
+  <label style="font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px"><input type="checkbox" id="kl_diff" onchange="renderCmpKL()"> Solo con diferencia</label>
+  <button class="btn btn-x" onclick="exportCmp('kl')">⬇ Exportar reporte</button>
+</div>
+<div class="rangeinfo" id="kl_info"></div>
+<div class="pvwrap"><table>
+<thead><tr><th>Farm.</th><th>Farmacia</th><th class="n">#&nbsp;LD</th><th class="n">LD</th><th class="n">KIELSA neto</th><th class="n">Diferencia</th></tr></thead>
+<tbody id="kl_body"></tbody>
+<tfoot><tr><td colspan="3">TOTAL (rango)</td><td class="n" id="kl_tld"></td><td class="n" id="kl_tk"></td><td class="n" id="kl_tdif"></td></tr></tfoot>
+</table></div>
+</div>
+
+<div class="panel" id="cmp_ln">
+<h2>LD vs NEXTFIN por farmacia</h2>
+<div class="note-box">Compara <b>ValorCompra (LD)</b> contra el <b>neto de NEXTFIN (Créditos − Débitos)</b> por farmacia. La farmacia de NEXTFIN se toma de LD por el número de préstamo.</div>
+<div class="toolbar">
+  <div class="datebox"><span>Desde</span><input type="date" id="ln_d1" onchange="renderCmpLN()"><span>Hasta</span><input type="date" id="ln_d2" onchange="renderCmpLN()"></div>
+  <button class="btn" onclick="lnFull()">Todo</button>
+  <input type="text" id="ln_q" placeholder="Buscar farmacia…" oninput="renderCmpLN()">
+  <label style="font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px"><input type="checkbox" id="ln_diff" onchange="renderCmpLN()"> Solo con diferencia</label>
+  <button class="btn btn-x" onclick="exportCmp('ln')">⬇ Exportar reporte</button>
+</div>
+<div class="rangeinfo" id="ln_info"></div>
+<div class="pvwrap"><table>
+<thead><tr><th>Farm.</th><th>Farmacia</th><th class="n">#&nbsp;LD</th><th class="n">LD</th><th class="n">NEXTFIN neto</th><th class="n">Diferencia</th></tr></thead>
+<tbody id="ln_body"></tbody>
+<tfoot><tr><td colspan="3">TOTAL (rango)</td><td class="n" id="ln_tld"></td><td class="n" id="ln_tn"></td><td class="n" id="ln_tdif"></td></tr></tfoot>
 </table></div>
 </div>
 
@@ -286,7 +368,9 @@ function reconcile(){
   const toISO=n=>{const s=String(n);return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);};
   const d1=document.getElementById('d1'),d2=document.getElementById('d2');
   d1.min=d2.min=toISO(lo);d1.max=d2.max=toISO(hi);d1.value=toISO(lo);d2.value=toISO(hi);
-  renderResumen();render();
+  ['kl','ln'].forEach(p=>{const a=document.getElementById(p+'_d1'),b=document.getElementById(p+'_d2');if(a&&b){a.min=b.min=toISO(lo);a.max=b.max=toISO(hi);a.value=toISO(lo);b.value=toISO(hi);}});
+  initColView();initFarmFilter();
+  renderResumen();render();renderCmpKL();renderCmpLN();
 }
 
 function renderResumen(){
@@ -326,7 +410,7 @@ function bounds(){return [inum(document.getElementById('d1').value),inum(documen
 function fullRange(){document.getElementById('d1').value=document.getElementById('d1').min;document.getElementById('d2').value=document.getElementById('d2').max;render();}
 function expandAll(v){DATA.forEach((b,i)=>open['s'+i]=v);render();}
 function filtered(){const q=document.getElementById('q').value.trim().toLowerCase();const onlyd=document.getElementById('onlydiff').checked;const [lo,hi]=bounds();const inR=f=>{const n=dnum(f);return n>=lo&&n<=hi;};const out=[];
-  DATA.forEach((b,i)=>{const det=b.det.filter(d=>inR(d.f));if(!det.length)return;let ld=0,net=0,dia=0;det.forEach(d=>{ld+=d.ld;net+=d.net;dia+=d.dia;});ld=r2(ld);net=r2(net);dia=r2(dia);const difk=r2(ld-net),difn=r2(ld-dia);
+  DATA.forEach((b,i)=>{if(!farmVisible(b.s))return;const det=b.det.filter(d=>inR(d.f));if(!det.length)return;let ld=0,net=0,dia=0;det.forEach(d=>{ld+=d.ld;net+=d.net;dia+=d.dia;});ld=r2(ld);net=r2(net);dia=r2(dia);const difk=r2(ld-net),difn=r2(ld-dia);
     if(q&&!((b.s+' '+b.nom).toLowerCase().includes(q)))return;if(onlyd&&Math.abs(difn)<0.005&&Math.abs(difk)<0.005)return;out.push({i,s:b.s,nom:b.nom,det,ld,net,dia,difk,difn});});return out;}
 function render(){if(!DATA.length)return;const rows=filtered();let html='';let TL=0,TN=0,TD=0;const [lo,hi]=bounds();const inR=f=>{const n=dnum(f);return n>=lo&&n<=hi;};
   rows.forEach(R=>{TL+=R.ld;TN+=R.net;TD+=R.dia;const i=R.i;const o=open['s'+i];
@@ -346,6 +430,7 @@ function render(){if(!DATA.length)return;const rows=filtered();let html='';let T
   document.getElementById('tDk').textContent=money(r2(TL-TN));document.getElementById('tDia').textContent=money(TD);document.getElementById('tDn').textContent=money(r2(TL-TD));
   const s1=document.getElementById('d1').value.split('-').reverse().join('/'),s2=document.getElementById('d2').value.split('-').reverse().join('/');
   document.getElementById('rinfo').innerHTML=`Rango <b>${s1}</b> — <b>${s2}</b> &nbsp;·&nbsp; LD <b>${money(TL)}</b> &nbsp;·&nbsp; KIELSA <b>${money(TD)}</b> &nbsp;·&nbsp; descuadre <b>${money(r2(TL-TD))}</b> &nbsp;·&nbsp; ${rows.length} farmacias`;
+  applyColView();
 }
 function tg(k){open[k]=!open[k];render();}
 function saveGsUrl(){try{localStorage.setItem('cp_gsUrl',document.getElementById('gsUrl').value.trim());}catch(e){}}
@@ -435,5 +520,159 @@ function exportExcel(){
   XLSX.utils.book_append_sheet(wb,ws,'Conciliación');
   const fn='Conciliacion_'+s1.replace(/\//g,'-')+'_a_'+s2.replace(/\//g,'-')+'.xlsx';
   XLSX.writeFile(wb,fn);
+}
+
+/* ===== Login (control de acceso en el navegador — no es seguridad real) ===== */
+const LG={u:'khonduras',p:'khonduras'};
+function doLogin(){
+  const u=(document.getElementById('lgUser').value||'').trim();
+  const p=(document.getElementById('lgPass').value||'');
+  if(u===LG.u&&p===LG.p){try{sessionStorage.setItem('cp_auth','1');}catch(e){}
+    document.getElementById('loginOverlay').classList.add('hidden');}
+  else{document.getElementById('lgErr').textContent='Usuario o contraseña incorrectos.';}
+}
+function logout(){try{sessionStorage.removeItem('cp_auth');}catch(e){}location.reload();}
+(function(){
+  try{if(sessionStorage.getItem('cp_auth')==='1'){const o=document.getElementById('loginOverlay');if(o)o.classList.add('hidden');}}catch(e){}
+  document.addEventListener('keydown',e=>{const o=document.getElementById('loginOverlay');if(e.key==='Enter'&&o&&!o.classList.contains('hidden'))doLogin();});
+})();
+
+/* ===== Columnas: mostrar/ocultar y reordenar (tabla interactiva) ===== */
+const VCOLS=[
+ {id:'ld',label:'ValorCompra (LD)'},
+ {id:'net',label:'NEXTFIN neto'},
+ {id:'difk',label:'Dif LD-NEXTFIN'},
+ {id:'dia',label:'KIELSA neto (DIARIO)'},
+ {id:'difn',label:'Dif LD-KIELSA'}
+];
+let colOrder=[0,1,2,3,4], colHidden=[false,false,false,false,false], colInit=false;
+function saveCols(){try{localStorage.setItem('cp_cols',JSON.stringify({o:colOrder,h:colHidden}));}catch(e){}}
+function loadCols(){try{const s=JSON.parse(localStorage.getItem('cp_cols'));if(s&&Array.isArray(s.o)&&s.o.length===5){colOrder=s.o;colHidden=s.h||[false,false,false,false,false];}}catch(e){}}
+function initColView(){
+  if(!colInit){colInit=true;loadCols();
+    const ths=document.querySelectorAll('#pivot thead th[draggable=true]');
+    ths.forEach(th=>{
+      th.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',th.dataset.vid);th.style.opacity=.4;});
+      th.addEventListener('dragend',()=>{th.style.opacity='';});
+      th.addEventListener('dragover',e=>e.preventDefault());
+      th.addEventListener('drop',e=>{e.preventDefault();const from=+e.dataTransfer.getData('text/plain');const to=+th.dataset.vid;moveCol(from,to);});
+    });
+  }
+  const box=document.getElementById('colList');
+  if(box)box.innerHTML=VCOLS.map((c,i)=>`<label class="ckrow"><input type="checkbox" ${colHidden[i]?'':'checked'} onchange="toggleCol(${i},this.checked)"> ${esc(c.label)}</label>`).join('');
+}
+function moveCol(from,to){
+  if(from===to)return;
+  const pf=colOrder.indexOf(from);colOrder.splice(pf,1);
+  const pt=colOrder.indexOf(to);colOrder.splice(pt,0,from);
+  saveCols();render();
+}
+function toggleCol(vid,show){colHidden[vid]=!show;saveCols();applyColView();}
+function toggleColPanel(){const p=document.getElementById('colPanel');if(p)p.classList.toggle('hidden');}
+function applyColView(){
+  const table=document.getElementById('pivot');if(!table)return;
+  const rows=[];if(table.tHead)rows.push(...table.tHead.rows);if(table.tBodies[0])rows.push(...table.tBodies[0].rows);if(table.tFoot)rows.push(...table.tFoot.rows);
+  rows.forEach(tr=>{
+    const cells=[...tr.cells];if(cells.length<6)return; // omite filas con colspan
+    const val=cells.slice(1); // 5 celdas de valor: índice = vid 0..4
+    val.forEach(c=>tr.removeChild(c));
+    colOrder.forEach(vid=>{const c=val[vid];if(!c)return;c.style.display=colHidden[vid]?'none':'';tr.appendChild(c);});
+  });
+}
+
+/* ===== Filtro de farmacias ===== */
+let farmSel=null; // null = todas visibles
+function farmVisible(s){return !farmSel||farmSel.has(s);}
+function initFarmFilter(){
+  const box=document.getElementById('farmList');if(!box)return;
+  const q=(document.getElementById('farmSearch')?document.getElementById('farmSearch').value:'').toLowerCase();
+  box.innerHTML=DATA.map(b=>{
+    const lbl=b.s+' · '+b.nom;
+    if(q&&!lbl.toLowerCase().includes(q))return '';
+    const on=farmVisible(b.s);
+    return `<label class="ckrow"><input type="checkbox" ${on?'checked':''} onchange="toggleFarm('${b.s}',this.checked)"> ${esc(lbl)}</label>`;
+  }).join('');
+}
+function toggleFarm(s,on){
+  if(!farmSel)farmSel=new Set(DATA.map(b=>b.s));
+  if(on)farmSel.add(s);else farmSel.delete(s);
+  if(farmSel.size===DATA.length)farmSel=null;
+  render();renderCmpKL();renderCmpLN();
+}
+function farmAll(v){
+  farmSel=v?null:new Set();
+  initFarmFilter();render();renderCmpKL();renderCmpLN();
+}
+function toggleFarmPanel(){const p=document.getElementById('farmPanel');if(p)p.classList.toggle('hidden');}
+
+/* ===== Comparativos: KIELSA vs LD  ·  LD vs NEXTFIN ===== */
+function aggFarms(lo,hi,q){
+  const inR=f=>{const n=dnum(f);return n>=lo&&n<=hi;};const out=[];
+  DATA.forEach(b=>{
+    if(!farmVisible(b.s))return;
+    if(q&&!((b.s+' '+b.nom).toLowerCase().includes(q)))return;
+    const det=b.det.filter(d=>inR(d.f));if(!det.length)return;
+    let ld=0,net=0,dia=0,ldn=0;det.forEach(d=>{ld+=d.ld;net+=d.net;dia+=d.dia;ldn+=d.L.length;});
+    ld=r2(ld);net=r2(net);dia=r2(dia);
+    out.push({s:b.s,nom:b.nom,ld,net,dia,ldn,difk:r2(ld-net),difn:r2(ld-dia)});
+  });
+  return out.sort((a,b)=>((parseInt(a.s)||0)-(parseInt(b.s)||0)));
+}
+function cmpBounds(p){return [inum(document.getElementById(p+'_d1').value),inum(document.getElementById(p+'_d2').value)];}
+function klFull(){const a=document.getElementById('kl_d1');a.value=a.min;const b=document.getElementById('kl_d2');b.value=b.max;renderCmpKL();}
+function lnFull(){const a=document.getElementById('ln_d1');a.value=a.min;const b=document.getElementById('ln_d2');b.value=b.max;renderCmpLN();}
+function renderCmpKL(){
+  if(!DATA.length||!document.getElementById('kl_body'))return;
+  const [lo,hi]=cmpBounds('kl');const q=(document.getElementById('kl_q').value||'').trim().toLowerCase();
+  const onlyd=document.getElementById('kl_diff').checked;
+  let list=aggFarms(lo,hi,q);if(onlyd)list=list.filter(r=>Math.abs(r.difn)>0.005);
+  let TL=0,TK=0;
+  const html=list.map(r=>{TL+=r.ld;TK+=r.dia;const c=Math.abs(r.difn)>0.005?(r.difn>0?'pos':'neg'):'ok';
+    return `<tr><td class="c">${r.s}</td><td class="l">${esc(r.nom)}</td><td class="n">${r.ldn}</td><td class="n">${money(r.ld)}</td><td class="n">${money(r.dia)}</td><td class="n ${c}">${money(r.difn)}</td></tr>`;}).join('');
+  document.getElementById('kl_body').innerHTML=html||'<tr><td colspan="6" style="padding:18px;color:var(--mut)">Sin resultados en el rango.</td></tr>';
+  document.getElementById('kl_tld').textContent=money(r2(TL));
+  document.getElementById('kl_tk').textContent=money(r2(TK));
+  document.getElementById('kl_tdif').textContent=money(r2(TL-TK));
+  const s1=document.getElementById('kl_d1').value.split('-').reverse().join('/'),s2=document.getElementById('kl_d2').value.split('-').reverse().join('/');
+  document.getElementById('kl_info').innerHTML=`Rango <b>${s1}</b> — <b>${s2}</b> &nbsp;·&nbsp; LD <b>${money(r2(TL))}</b> &nbsp;·&nbsp; KIELSA <b>${money(r2(TK))}</b> &nbsp;·&nbsp; diferencia <b>${money(r2(TL-TK))}</b> &nbsp;·&nbsp; ${list.length} farmacias`;
+}
+function renderCmpLN(){
+  if(!DATA.length||!document.getElementById('ln_body'))return;
+  const [lo,hi]=cmpBounds('ln');const q=(document.getElementById('ln_q').value||'').trim().toLowerCase();
+  const onlyd=document.getElementById('ln_diff').checked;
+  let list=aggFarms(lo,hi,q);if(onlyd)list=list.filter(r=>Math.abs(r.difk)>0.005);
+  let TL=0,TN=0;
+  const html=list.map(r=>{TL+=r.ld;TN+=r.net;const c=Math.abs(r.difk)>0.005?(r.difk>0?'pos':'neg'):'ok';
+    return `<tr><td class="c">${r.s}</td><td class="l">${esc(r.nom)}</td><td class="n">${r.ldn}</td><td class="n">${money(r.ld)}</td><td class="n">${money(r.net)}</td><td class="n ${c}">${money(r.difk)}</td></tr>`;}).join('');
+  document.getElementById('ln_body').innerHTML=html||'<tr><td colspan="6" style="padding:18px;color:var(--mut)">Sin resultados en el rango.</td></tr>';
+  document.getElementById('ln_tld').textContent=money(r2(TL));
+  document.getElementById('ln_tn').textContent=money(r2(TN));
+  document.getElementById('ln_tdif').textContent=money(r2(TL-TN));
+  const s1=document.getElementById('ln_d1').value.split('-').reverse().join('/'),s2=document.getElementById('ln_d2').value.split('-').reverse().join('/');
+  document.getElementById('ln_info').innerHTML=`Rango <b>${s1}</b> — <b>${s2}</b> &nbsp;·&nbsp; LD <b>${money(r2(TL))}</b> &nbsp;·&nbsp; NEXTFIN <b>${money(r2(TN))}</b> &nbsp;·&nbsp; diferencia <b>${money(r2(TL-TN))}</b> &nbsp;·&nbsp; ${list.length} farmacias`;
+}
+function exportCmp(which){
+  if(typeof XLSX==='undefined'){alert('No se pudo generar el Excel: falta la librería XLSX.');return;}
+  const p=which;
+  const [lo,hi]=cmpBounds(p);const q=(document.getElementById(p+'_q').value||'').trim().toLowerCase();
+  const onlyd=document.getElementById(p+'_diff').checked;
+  let list=aggFarms(lo,hi,q);
+  const s1=document.getElementById(p+'_d1').value.split('-').reverse().join('/');
+  const s2=document.getElementById(p+'_d2').value.split('-').reverse().join('/');
+  let title,h4,pick;
+  if(which==='kl'){if(onlyd)list=list.filter(r=>Math.abs(r.difn)>0.005);title='Comparativo KIELSA vs LD';h4=['LD (ValorCompra)','KIELSA neto','Diferencia (LD − KIELSA)'];pick=r=>[r.ld,r.dia,r.difn];}
+  else{if(onlyd)list=list.filter(r=>Math.abs(r.difk)>0.005);title='Comparativo LD vs NEXTFIN';h4=['LD (ValorCompra)','NEXTFIN neto','Diferencia (LD − NEXTFIN)'];pick=r=>[r.ld,r.net,r.difk];}
+  const aoa=[[title],['Rango: '+s1+' a '+s2+' · Montos en Lempiras'],[],['Farm.','Farmacia','# LD',...h4]];
+  let ln=0,t1=0,t2=0,t3=0;
+  list.forEach(r=>{const v=pick(r);ln+=r.ldn;t1+=v[0];t2+=v[1];t3+=v[2];aoa.push([r.s,r.nom,r.ldn,v[0],v[1],v[2]]);});
+  aoa.push([]);aoa.push(['TOTAL','',ln,r2(t1),r2(t2),r2(t3)]);
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:8},{wch:42},{wch:8},{wch:18},{wch:18},{wch:22}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:5}},{s:{r:1,c:0},e:{r:1,c:5}}];
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let r=range.s.r;r<=range.e.r;r++){for(let c=3;c<=5;c++){const cell=ws[XLSX.utils.encode_cell({r,c})];if(cell&&cell.t==='n')cell.z='#,##0.00';}}
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,which==='kl'?'KIELSA vs LD':'LD vs NEXTFIN');
+  XLSX.writeFile(wb,(which==='kl'?'KIELSA_vs_LD_':'LD_vs_NEXTFIN_')+s1.replace(/\//g,'-')+'_a_'+s2.replace(/\//g,'-')+'.xlsx');
 }
 </script></body></html>
