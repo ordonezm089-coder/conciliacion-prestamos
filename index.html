@@ -154,7 +154,7 @@ tfoot td{position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:
 <div class="scroll"><table><thead><tr><th>No. Préstamo</th><th>Fecha</th><th class="n">Crédito</th><th class="n">Débito</th><th class="n">Neto</th></tr></thead><tbody id="anulBody"></tbody></table></div>
 </div>
 
-<div class="foot"><b>Metodología:</b> LD↔NEXTFIN por IdSolicitud · farmacia = código K### del nombre = últimos 3 dígitos del CCO de DIARIO · NEXTFIN neto = Créditos − Débitos · anulados por referencia "Anulación".</div>
+<div class="foot"><b>Metodología:</b> LD↔NEXTFIN por IdSolicitud · farmacia = código K### del nombre = dígitos tras el 3er «-» del CCO de DIARIO · NEXTFIN neto = Créditos − Débitos · KIELSA neto = Débitos − Créditos · anulados por referencia "Anulación".</div>
 </div>
 </div>
 <script>/*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
@@ -218,7 +218,7 @@ function handleFiles(files){
       else{let ent='';for(let i=0;i<Math.min(rows.length,80);i++){const nm=norm(gf(rows[i],['Nombre','NOMBRE'])||'');if(nm.includes('nextfin')){ent='nextfin';break;}if(nm.includes('kielsa')){ent='kielsa';break;}}
         if(ent==='nextfin')type='dia';
         else if(ent==='kielsa')type='net';
-        else if(keys.includes('cco'))type='dia';
+        else if(keys.includes('cco')||keys.includes('centro costo'))type='dia';
         else if(keys.includes('documento')||keys.some(k=>k.startsWith('credito')))type='net';}
       if(type){RAW[type]=rows;markChip(type,f.name,rows.length);tryReconcile();}
     };
@@ -249,12 +249,12 @@ function reconcile(){
     n.cred+=num(gf(row,['Créditos','Creditos']));n.deb+=num(gf(row,['Débitos','Debitos']));
     if(norm(gf(row,['Referencia'])||'').includes('nulacion'))n.anul=true;n.fecha=fmtDate(gf(row,['Fecha']));});
   const diaLines={},diaKF={};
-  const diaCco=RAW.dia.length&&gf(RAW.dia[0],['CCO'])!=null;
+  const diaCco=RAW.dia.length&&RAW.dia.some((r,i)=>i<50&&gf(r,['CCO','Centro Costo','CentroCosto','Centro de Costo'])!=null);
   if(diaCco){
-    RAW.dia.forEach(row=>{const cco=String(gf(row,['CCO'])||'');const last=cco.split('-').pop();const ki=parseInt(last,10);const k=isNaN(ki)?'?':String(ki);
-      const fecha=fmtDate(gf(row,['FECHA','Fecha']));const debe=num(gf(row,['DEBE','Debe']));const haber=num(gf(row,['HABER','Haber']));
-      const key=k+'|'+fecha;diaKF[key]=(diaKF[key]||0)+debe;
-      (diaLines[key]||(diaLines[key]=[])).push({doc:String(gf(row,['DOCUMENTO','Documento'])||''),ref:String(gf(row,['REFERENCIA','Referencia'])||''),pda:String(gf(row,['PDA'])||''),debe:r2(debe),haber:r2(haber)});});
+    RAW.dia.forEach(row=>{const cco=String(gf(row,['CCO','Centro Costo','CentroCosto','Centro de Costo'])||'');const m4=cco.match(/^\s*\d+\s*-\s*\d+\s*-\s*\d+\s*-\s*(\d+)/);const ki=m4?parseInt(m4[1],10):parseInt(((cco.match(/\d+/)||['NaN'])[0]),10);const k=isNaN(ki)?'?':String(ki);
+      const fecha=fmtDate(gf(row,['FECHA','Fecha']));const debe=num(gf(row,['DEBE','Debe','Débitos','Debitos']));const haber=num(gf(row,['HABER','Haber','Créditos','Creditos']));
+      const key=k+'|'+fecha;diaKF[key]=(diaKF[key]||0)+(debe-haber);
+      (diaLines[key]||(diaLines[key]=[])).push({doc:String(gf(row,['DOCUMENTO','Documento'])||''),ref:String(gf(row,['REFERENCIA','Referencia'])||''),pda:String(gf(row,['PDA'])||''),debe:r2(debe-haber),haber:r2(haber)});});
   }else{
     /* Formato NETFIX en la casilla DIARIO: sin CCO. Se asigna cada movimiento a su farmacia y fecha usando el # de prestamo (Documento) contra LD. Monto neto = Creditos - Debitos. */
     RAW.dia.forEach(row=>{const doc=String(gf(row,['Documento','DOCUMENTO'])||'');const m=doc.match(/(\d{4,})/);if(!m)return;const pid=m[1];const rec=ldById[pid];if(!rec)return;
