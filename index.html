@@ -190,7 +190,7 @@ tfoot td{position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:
 <div class="pvwrap"><table id="pivot">
 <thead><tr><th data-vid="label">Farmacia / Fecha / Detalle</th><th class="n" data-vid="0" draggable="true" title="Arrastra para reordenar">ValorCompra (LD)</th><th class="n" data-vid="1" draggable="true" title="Arrastra para reordenar">NEXTFIN neto</th><th class="n" data-vid="2" draggable="true" title="Arrastra para reordenar">Dif LD-NEXTFIN</th><th class="n" data-vid="3" draggable="true" title="Arrastra para reordenar">KIELSA neto (DIARIO)</th><th class="n" data-vid="4" draggable="true" title="Arrastra para reordenar">Dif LD-KIELSA</th></tr></thead>
 <tbody id="pbody"></tbody>
-<tfoot><tr><td>TOTAL (rango filtrado)</td><td class="n" id="tLd"></td><td class="n" id="tNet"></td><td class="n" id="tDk"></td><td class="n" id="tDia"></td><td class="n" id="tDn"></td></tr></tfoot>
+<tfoot><tr><td data-vid="label">TOTAL (rango filtrado)</td><td class="n" id="tLd" data-vid="0"></td><td class="n" id="tNet" data-vid="1"></td><td class="n" id="tDk" data-vid="2"></td><td class="n" id="tDia" data-vid="3"></td><td class="n" id="tDn" data-vid="4"></td></tr></tfoot>
 </table></div>
 </div>
 
@@ -430,7 +430,7 @@ function render(){if(!DATA.length)return;const rows=filtered();let html='';let T
   document.getElementById('tDk').textContent=money(r2(TL-TN));document.getElementById('tDia').textContent=money(TD);document.getElementById('tDn').textContent=money(r2(TL-TD));
   const s1=document.getElementById('d1').value.split('-').reverse().join('/'),s2=document.getElementById('d2').value.split('-').reverse().join('/');
   document.getElementById('rinfo').innerHTML=`Rango <b>${s1}</b> — <b>${s2}</b> &nbsp;·&nbsp; LD <b>${money(TL)}</b> &nbsp;·&nbsp; KIELSA <b>${money(TD)}</b> &nbsp;·&nbsp; descuadre <b>${money(r2(TL-TD))}</b> &nbsp;·&nbsp; ${rows.length} farmacias`;
-  applyColView();
+  tagBodyVids();applyColView();
 }
 function tg(k){open[k]=!open[k];render();}
 function saveGsUrl(){try{localStorage.setItem('cp_gsUrl',document.getElementById('gsUrl').value.trim());}catch(e){}}
@@ -569,14 +569,20 @@ function moveCol(from,to){
 }
 function toggleCol(vid,show){colHidden[vid]=!show;saveCols();applyColView();}
 function toggleColPanel(){const p=document.getElementById('colPanel');if(p)p.classList.toggle('hidden');}
+function tagBodyVids(){
+  const tb=document.getElementById('pbody');if(!tb)return;
+  [...tb.rows].forEach(tr=>{if(tr.cells.length<6)return;for(let i=1;i<=5;i++){tr.cells[i].dataset.vid=String(i-1);}});
+}
 function applyColView(){
   const table=document.getElementById('pivot');if(!table)return;
   const rows=[];if(table.tHead)rows.push(...table.tHead.rows);if(table.tBodies[0])rows.push(...table.tBodies[0].rows);if(table.tFoot)rows.push(...table.tFoot.rows);
   rows.forEach(tr=>{
-    const cells=[...tr.cells];if(cells.length<6)return; // omite filas con colspan
-    const val=cells.slice(1); // 5 celdas de valor: índice = vid 0..4
-    val.forEach(c=>tr.removeChild(c));
-    colOrder.forEach(vid=>{const c=val[vid];if(!c)return;c.style.display=colHidden[vid]?'none':'';tr.appendChild(c);});
+    if(tr.cells.length<6)return; // omite filas con colspan
+    const byVid={};let ok=true;
+    for(let v=0;v<5;v++){const c=[...tr.cells].find(x=>x.dataset&&x.dataset.vid===String(v));if(!c){ok=false;break;}byVid[v]=c;}
+    if(!ok)return;
+    for(let v=0;v<5;v++)tr.removeChild(byVid[v]);
+    colOrder.forEach(vid=>{const c=byVid[vid];c.style.display=colHidden[vid]?'none':'';tr.appendChild(c);});
   });
 }
 
