@@ -114,14 +114,14 @@ tfoot td{position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:
   </div>
 </div>
 <div class="hero"><div class="wrap">
-  <div><h1>Conciliación de Préstamos</h1><div class="meta">Kielsa Farmacéutica &nbsp;·&nbsp; NEXTFIN Capital &nbsp;·&nbsp; Plantilla reutilizable</div></div>
+  <div><h1>Conciliación de Préstamos</h1><div class="meta"></div></div>
   <div><div class="badge" id="badge">Carga tus archivos para comenzar</div><span class="logoutBtn" onclick="logout()">Salir</span></div>
 </div></div>
 
 <div class="wrap">
 <div class="uploader" id="uploader">
   <h3>Cargar archivos del período</h3>
-  <p>Arrastra o selecciona los tres Excel: <b>LD</b>, <b>NETFIX</b> y <b>DIARIO</b>. Se detectan automáticamente por sus columnas y la conciliación se genera al instante en tu navegador (sin enviar nada a internet).</p>
+  <p>Arrastra o selecciona los tres Excel: <b>LD</b>, <b>NETFIX</b> y <b>DIARIO</b>.</p>
   <div class="drop" id="drop">
     <div class="big">⬆ Arrastra aquí los 3 archivos, o haz clic para seleccionarlos</div>
     <div class="sm">Acepta .xlsx / .xls — puedes soltarlos todos juntos</div>
@@ -136,7 +136,7 @@ tfoot td{position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:
 
 <div id="app" class="hidden">
 <div class="tabs">
-  <div class="tab active" data-p="resumen">Resumen ejecutivo</div>
+  <div class="tab active" data-p="resumen">Resumen</div>
   <div class="tab" data-p="interactiva">Conciliación interactiva</div>
   <div class="tab" data-p="cmp_kl">KIELSA vs LD</div>
   <div class="tab" data-p="cmp_ln">LD vs NEXTFIN</div>
@@ -236,7 +236,7 @@ tfoot td{position:sticky;bottom:0;background:var(--navy);color:#fff;font-weight:
 <div class="scroll"><table><thead><tr><th>No. Préstamo</th><th>Fecha</th><th class="n">Crédito</th><th class="n">Débito</th><th class="n">Neto</th></tr></thead><tbody id="anulBody"></tbody></table></div>
 </div>
 
-<div class="foot"><b>Metodología:</b> LD↔NEXTFIN por IdSolicitud · farmacia = código K### del nombre = dígitos tras el 3er «-» del CCO de DIARIO · NEXTFIN neto = Créditos − Débitos · KIELSA neto = Débitos − Créditos · anulados por referencia "Anulación".</div>
+<div class="foot"></div>
 </div>
 </div>
 <script>/*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
@@ -394,7 +394,7 @@ function renderResumen(){
   // descuadres
   const desc=DATA.map(b=>{let ld=0,dia=0,ldn=0;b.det.forEach(d=>{ld+=d.ld;dia+=d.dia;ldn+=d.L.length;});return {s:b.s,nom:b.nom,ldn,ld:r2(ld),dia:r2(dia),difn:r2(ld-dia)};}).filter(r=>Math.abs(r.difn)>0.5).sort((a,b)=>Math.abs(b.difn)-Math.abs(a.difn));
   document.getElementById('descH').textContent='Descuadres por farmacia — LD vs DIARIO ('+desc.length+')';
-  document.getElementById('descNote').innerHTML='Suman '+money(r2(desc.reduce((s,r)=>s+r.difn,0)))+'. Revísalas en la conciliación interactiva para ver qué documentos las originan.';
+  document.getElementById('descNote').innerHTML='Suman '+money(r2(desc.reduce((s,r)=>s+r.difn,0)))+'.';
   document.getElementById('descBody').innerHTML=desc.map(r=>{const c=Math.abs(r.difn)>0.005?(r.difn>0?'pos':'neg'):'ok';return `<tr><td class="c">${r.s}</td><td class="l">${esc(r.nom)}</td><td class="c">${r.ldn}</td><td class="n">${money(r.ld)}</td><td class="n">${money(r.dia)}</td><td class="n ${c}">${money(r.difn)}</td></tr>`;}).join('');
   document.getElementById('anulH').textContent='Préstamos anulados en NEXTFIN ('+t.anul_n+')';
   document.getElementById('anulNote2').innerHTML='Registro (crédito) + anulación (débito) por el mismo monto → <b>neto L 0.00</b>. No están en LD. Total: '+money(t.anul_monto)+' por lado.';
